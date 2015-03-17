@@ -792,13 +792,26 @@ string compileFunction(FuncSig* sig, Context* vars)
     auto funcDef = compileBlock(
         cast(BareBlockNode)funcBodyBlocks.children[0], vars
     );
-    // Determine the total amount of stack space used by the function at max
-    auto totalStackSpaceUsed = sig.stackVarAllocSize + vars.maxTempSpaceUsed;
+    // Determine the total amount of stack space used by the function at max,
+    // plus allocate space for the callee-saved registers to save them:
+    // rbx
+    // r12
+    // r13
+    // r14
+    // r15
+    auto calleeSavedSize = 40;
+    auto totalStackSpaceUsed = sig.stackVarAllocSize + vars.maxTempSpaceUsed
+                                                     + calleeSavedSize;
     // Allocate space on the stack, keeping the stack in 16-byte alignment
     auto stackAlignedAlloc = totalStackSpaceUsed + (totalStackSpaceUsed % 16);
-    auto stackRestoreStr = "    add    rsp, " ~ stackAlignedAlloc.to!string
-                                           ~ "\n";
     funcHeader ~= "    sub    rsp, " ~ stackAlignedAlloc.to!string ~ "\n";
+    funcHeader ~= compileRegSave(["rbx", "r12", "r13", "r14", "r15"], vars);
+    auto stackRestoreStr = compileRegRestore(
+        ["rbx", "r12", "r13", "r14", "r15"],
+        vars
+    );
+    stackRestoreStr = "    add    rsp, " ~ stackAlignedAlloc.to!string
+                                         ~ "\n";
     funcDef = replace(funcDef, STACK_RESTORE_PLACEHOLDER, stackRestoreStr);
     auto funcFooter = "";
     funcFooter ~= stackRestoreStr;
