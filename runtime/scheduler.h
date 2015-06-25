@@ -38,6 +38,8 @@ typedef struct
     // Memory populated with the function arguments to be placed in registers
     // in a canned way in callFunc
     void* regVars;
+    // Note whether the thread is currently being executed
+    uint8_t isExecuting;
 } ThreadData;
 
 extern void callFunc(ThreadData* curThread);
@@ -73,5 +75,7 @@ void takedownThreadManager();
 // void addThreadData(uint32_t argBytes, void* funcAddr, ...);
 
 void execScheduler();
+
+void* scheduler(void*);
 
 #endif

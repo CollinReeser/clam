@@ -1,12 +1,17 @@
+#include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdarg.h>
 #include <sys/mman.h>
+#include <unistd.h> // for sysconf and _SC_NPROCESSOR_ONLIN
 #include "scheduler.h"
 
 GlobalThreadMem* g_threadManager = NULL;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+unsigned int numCores;
 
 void printThreadData(ThreadData* curThread)
 {
@@ -152,6 +157,8 @@ void newProc(uint32_t numArgs, void* funcAddr, int8_t* argLens, void* args)
     newThread->regVars = regVars;
     // Number of bytes allocated for arguments on stack
     newThread->stackArgsSize = onStack * 8;
+    // Set newThread to not be currently executing
+    newThread->isExecuting = 0;
     // Put newThread into global thread manager, allocating space for the
     // pointer if necessary. Check first if we need to allocate more memory
     if (g_threadManager->threadArrIndex >= g_threadManager->threadArrLen)
@@ -172,16 +179,44 @@ void newProc(uint32_t numArgs, void* funcAddr, int8_t* argLens, void* args)
 
 void execScheduler()
 {
+    numCores = sysconf(_SC_NPROCESSORS_ONLN);
+    unsigned long i;
+    for (i = 1; i < numCores; i++)
+    {
+        pthread_t threads[numCores];
+        int resCode = pthread_create(&threads[i], NULL, scheduler, (void*)i);
+        assert(0 == resCode);
+    }
+    scheduler(NULL);
+}
+
+void* scheduler(void* arg)
+{
+    unsigned long self = (unsigned long)arg;
     // This is a blindingly terrible scheduler
     uint32_t i = 0;
     uint8_t stillValid = 0;
+    printf("Thread %d calling in!\n", self);
     for (i = 0; i < g_threadManager->threadArrIndex; i++)
     {
         ThreadData* curThread = g_threadManager->threadArr[i];
-        if (curThread->stillValid != 0 || curThread->curFuncAddr == 0)
+        if ((curThread->stillValid != 0 || curThread->curFuncAddr == 0)
+            && curThread->isExecuting == 0)
         {
-            stillValid = 1;
-            callThreadFunc(curThread);
+            pthread_mutex_lock(&mutex);
+            if (curThread->isExecuting != 0)
+            {
+                pthread_mutex_unlock(&mutex);
+            }
+            else
+            {
+                curThread->isExecuting = 1;
+                pthread_mutex_unlock(&mutex);
+                stillValid = 1;
+                printf("Thread %d taking responsibility!\n", self);
+                callThreadFunc(curThread);
+                curThread->isExecuting = 0;
+            }
         }
         if (i + 1 >= g_threadManager->threadArrIndex && stillValid != 0)
         {
