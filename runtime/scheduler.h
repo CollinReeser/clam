@@ -42,7 +42,13 @@ typedef struct
     uint8_t isExecuting;
 } ThreadData;
 
-extern void callFunc(ThreadData* curThread);
+typedef struct
+{
+    ThreadData* threadData;
+    uint8_t valid;
+} SchedulerData;
+
+extern void callFunc(ThreadData*, volatile SchedulerData*, uint32_t);
 extern void yield();
 
 // The size values in argLens can be positive or negative. If they're positive,
@@ -54,7 +60,7 @@ void newProc(uint32_t argBytes, void* funcAddr, int8_t* argLens, void* args);
 
 void printThreadData(ThreadData* curThread);
 
-void callThreadFunc(ThreadData* thread);
+void callThreadFunc(ThreadData* thread, uint32_t index);
 
 void deallocThreadData(ThreadData* thread);
 
@@ -76,6 +82,8 @@ void takedownThreadManager();
 
 void execScheduler();
 
-void* scheduler(void*);
+void scheduler();
+
+void* awaitTask(void* arg);
 
 #endif

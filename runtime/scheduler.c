@@ -11,7 +11,12 @@
 
 GlobalThreadMem* g_threadManager = NULL;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-unsigned int numCores;
+uint32_t numCores;
+uint32_t numThreads;
+pthread_t* kernelThreads;
+volatile SchedulerData* schedulerData;
+uint64_t programDone = 0;
+
 
 void printThreadData(ThreadData* curThread)
 {
@@ -26,9 +31,9 @@ void printThreadData(ThreadData* curThread)
     printf("    stillValid           : %u\n", curThread->stillValid);
 }
 
-void callThreadFunc(ThreadData* thread)
+void callThreadFunc(ThreadData* thread, uint32_t index)
 {
-    callFunc(thread);
+    callFunc(thread, schedulerData, index);
 }
 
 void deallocThreadData(ThreadData* thread)
@@ -180,48 +185,83 @@ void newProc(uint32_t numArgs, void* funcAddr, int8_t* argLens, void* args)
 void execScheduler()
 {
     numCores = sysconf(_SC_NPROCESSORS_ONLN);
+    numThreads = numCores * 8;
+    kernelThreads = (pthread_t*)malloc(numThreads * sizeof(pthread_t));
+    schedulerData = (SchedulerData*)malloc(numThreads * sizeof(SchedulerData));
     unsigned long i;
-    for (i = 1; i < numCores; i++)
+    for (i = 0; i < numThreads; i++)
     {
-        pthread_t threads[numCores];
-        int resCode = pthread_create(&threads[i], NULL, scheduler, (void*)i);
+        int resCode = pthread_create(
+            (kernelThreads + i), NULL, awaitTask, (void*)i
+        );
         assert(0 == resCode);
     }
-    scheduler(NULL);
+    scheduler();
 }
 
-void* scheduler(void* arg)
+void scheduler()
 {
-    unsigned long self = (unsigned long)arg;
     // This is a blindingly terrible scheduler
     uint32_t i = 0;
     uint8_t stillValid = 0;
-    printf("Thread %d calling in!\n", self);
     for (i = 0; i < g_threadManager->threadArrIndex; i++)
     {
         ThreadData* curThread = g_threadManager->threadArr[i];
         if ((curThread->stillValid != 0 || curThread->curFuncAddr == 0)
             && curThread->isExecuting == 0)
         {
-            pthread_mutex_lock(&mutex);
-            if (curThread->isExecuting != 0)
+            // Find a worker thread to exec this green thread
+            uint32_t j = 0;
+            while (1)
             {
-                pthread_mutex_unlock(&mutex);
-            }
-            else
-            {
-                curThread->isExecuting = 1;
-                pthread_mutex_unlock(&mutex);
-                stillValid = 1;
-                printf("Thread %d taking responsibility!\n", self);
-                callThreadFunc(curThread);
-                curThread->isExecuting = 0;
+                if (schedulerData[j].valid == 0)
+                {
+                    stillValid = 1;
+                    curThread->isExecuting = 1;
+                    schedulerData[j].threadData = curThread;
+                    schedulerData[j].valid = 1;
+                    break;
+                }
+                j++;
+                if (j >= numThreads)
+                {
+                    j = 0;
+                    sleep(1);
+                }
             }
         }
-        if (i + 1 >= g_threadManager->threadArrIndex && stillValid != 0)
+        if (i + 1 >= g_threadManager->threadArrIndex)// && stillValid != 0)
         {
             i = -1;
             stillValid = 0;
         }
     }
+    programDone = 1;
+    for (i = 0; i < numThreads; i++)
+    {
+        pthread_join(kernelThreads[i], NULL);
+    }
+}
+
+void* awaitTask(void* arg)
+{
+    uint32_t index = (uint32_t)(uint64_t)arg;
+    while (1)
+    {
+        while (schedulerData[index].valid == 0)
+        {
+            if (programDone == 1)
+            {
+                goto TERM_THREAD;
+            }
+            sleep(1);
+        }
+        ThreadData* threadData = schedulerData[index].threadData;
+        printf("About to call into green thread! %d\n", index);
+        callThreadFunc(threadData, index);
+        printf("Returned from green thread call! %d\n", index);
+        threadData->isExecuting = 0;
+    }
+TERM_THREAD:
+    return NULL;
 }

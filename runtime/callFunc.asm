@@ -3,6 +3,7 @@
 
 mainstack:      resq 1 ; Stored mainstack rsp
 currentthread:  resq 1 ; Pointer to current thread
+schedulerdata:  resq 1 ; Pointer to current worker thread SchedulerData
 
     SECTION .text
 
@@ -13,6 +14,10 @@ yield:
     ; return address on the stack, and rbp is whatever it is from the function
     ; that called yield()
 
+    ; Set worker thread to non-executing
+    add     r10, qword [schedulerdata]
+    add     r10, 8
+    mov     byte [r10], 0
     ; Get curThread pointer
     mov     rdx, qword [currentthread]
     ; Get return address
@@ -32,11 +37,21 @@ yield:
     jmp     schedulerReturn
 
 
-    ; extern void callFunc(ThreadData* curThread);
+    ; extern void callFunc(ThreadData*, SchedulerData* data, uint32_t index);
     global callFunc
 callFunc:
     push    rbp                     ; set up stack frame
     mov     rbp, rsp
+
+    ; Have r10 point to the address of data[index].valid
+    mov     r10, rsi            ; Do all the work in r10
+    imul    rdx, 9              ; sizeof(SchedulerData)
+    add     r10, rdx            ; r10 now points to data[index]
+    mov     qword [schedulerdata], r10 ; Store in case of a yield
+    add     r10, 8              ; r10 now points to data[index].valid
+    ; Set data[index].valid to 0, telling the scheduler it can now assign new
+    ; work to this worker thread (while it actually performs _this_ work)
+    mov     byte [r10], 0
 
     ; Populate registers for operation. ThreadData* thread is initially in rdi
     mov     rcx, rdi            ; ThreadData* thread
@@ -60,7 +75,7 @@ callFunc:
     mov     qword [rcx+8], r11  ; ThreadData->curFuncAddr, init to start of func
 
     ; Set stack pointer to be before arguments
-    sub     rdx, rdi
+    sub     rdx, rdi            ; Note that we're using the value in edi here
     ; Allocate 8 bytes on stack for return address
     sub     rdx, 8
     mov     qword [rdx], schedulerReturn
