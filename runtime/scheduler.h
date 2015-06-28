@@ -58,7 +58,7 @@ extern void yield();
 // or on the stack after the eighth integer argument
 void newProc(uint32_t argBytes, void* funcAddr, int8_t* argLens, void* args);
 
-void printThreadData(ThreadData* curThread);
+void printThreadData(ThreadData* curThread, int32_t v);
 
 void callThreadFunc(ThreadData* thread, uint32_t index);
 

@@ -45,7 +45,7 @@ callFunc:
 
     ; Have r10 point to the address of data[index].valid
     mov     r10, rsi            ; Do all the work in r10
-    imul    rdx, 9              ; sizeof(SchedulerData)
+    imul    rdx, 16             ; sizeof(SchedulerData)
     add     r10, rdx            ; r10 now points to data[index]
     mov     qword [schedulerdata], r10 ; Store in case of a yield
     add     r10, 8              ; r10 now points to data[index].valid
