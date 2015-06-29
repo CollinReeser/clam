@@ -21,6 +21,9 @@ static uint32_t numThreads;
 static pthread_t* kernelThreads;
 static volatile SchedulerData* schedulerData;
 static volatile uint64_t programDone = 0;
+__thread uint64_t mainstack;
+__thread uint64_t currentthread;
+__thread uint64_t schedulerdata;
 
 
 void printThreadData(ThreadData* curThread, int32_t v)
@@ -250,16 +253,31 @@ void scheduler()
         // printf("\n");
 
         pthread_mutex_lock(&mutex);
+
         printf("Reading from thread manager: %d of 0:%d (%d)\n", i, (gthreadIndex-1), (g_threadManager->threadArrIndex-1));
+
         usleep(1);
         ThreadData* curThread = g_threadManager->threadArr[i];
+        uint8_t threadStillValid = curThread->stillValid;
+        void* threadCurFuncAddr = curThread->curFuncAddr;
+        uint8_t threadIsExecuting = curThread->isExecuting;
+
         printf("Read from thread manager!\n");
         printThreadData(curThread, i);
+
         pthread_mutex_unlock(&mutex);
-        if (curThread->stillValid != 0 || curThread->curFuncAddr == 0)
+        if (threadStillValid != 0 || threadCurFuncAddr == NULL)
         {
+
+            // Debugging: We get here, because the worker thread has not yet
+            // started executing the green thread, so curFuncAddr is 0. We
+            // rely on isExecuting to be 1, but, in the space of time it takes
+            // to make that check, the worker thread finished the green thread,
+            // and sets isExecuting to 0. So even though curFuncAddr != 0, and
+            // stillValid == 0, isExecuting is 0, so here we are!
+
             printf("Found GT to check: %d\n", i);
-            if (curThread->isExecuting == 0)
+            if (threadIsExecuting == 0)
             {
                 printf("Found GT to exec: %d\n", i);
                 // Find a worker thread to exec this green thread
@@ -271,9 +289,11 @@ void scheduler()
                     {
 
                         printf("Found KT to exec: %d\n", j);
-                        printThreadData(curThread, i);
 
                         curThread->isExecuting = 1;
+
+                        printThreadData(curThread, i);
+
                         // Place the green thread info in a worker thread
                         // mailbox
                         schedulerData[j].threadData = curThread;
@@ -290,7 +310,7 @@ void scheduler()
             }
             stillValid = 1;
         }
-        else if (curThread->isExecuting)
+        else if (curThread->isExecuting == 1)
         {
             stillValid = 1;
         }
@@ -350,6 +370,7 @@ void* awaitTask(void* arg)
             usleep(1);
         }
         ThreadData* threadData = schedulerData[index].threadData;
+        schedulerData[index].valid = 0;
 
         printf("About to call into green thread! %d\n", index);
         printThreadData(threadData, index);
@@ -358,7 +379,9 @@ void* awaitTask(void* arg)
 
         printf("Returned from green thread call! %d\n", index);
 
+        pthread_mutex_lock(&mutex);
         threadData->isExecuting = 0;
+        pthread_mutex_unlock(&mutex);
 
         printThreadData(threadData, index);
 

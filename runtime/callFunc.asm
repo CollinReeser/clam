@@ -1,11 +1,9 @@
 
-    SECTION .bss
-
-mainstack:      resq 1 ; Stored mainstack rsp
-currentthread:  resq 1 ; Pointer to current thread
-schedulerdata:  resq 1 ; Pointer to current worker thread SchedulerData
-
     SECTION .text
+
+extern mainstack
+extern currentthread
+extern schedulerdata
 
     ; extern void yield();
     global yield
@@ -48,10 +46,6 @@ callFunc:
     imul    rdx, 16             ; sizeof(SchedulerData)
     add     r10, rdx            ; r10 now points to data[index]
     mov     qword [schedulerdata], r10 ; Store in case of a yield
-    add     r10, 8              ; r10 now points to data[index].valid
-    ; Set data[index].valid to 0, telling the scheduler it can now assign new
-    ; work to this worker thread (while it actually performs _this_ work)
-    mov     byte [r10], 0
 
     ; Populate registers for operation. ThreadData* thread is initially in rdi
     mov     rcx, rdi            ; ThreadData* thread
