@@ -198,8 +198,9 @@ void newProc(uint32_t numArgs, void* funcAddr, int8_t* argLens, void* args)
 void execScheduler()
 {
 
-    printf("sizeof      : %d\n", sizeof(SchedulerData));
-    printf("valid offset: %d\n", offsetof(SchedulerData, valid));
+    printf("sizeof            : %d\n", sizeof(SchedulerData));
+    printf("valid offset      : %d\n", offsetof(SchedulerData, valid));
+    printf("isExecuting offset: %d\n", offsetof(ThreadData, isExecuting));
 
     numCores = sysconf(_SC_NPROCESSORS_ONLN);
     numThreads = numCores;
@@ -358,7 +359,7 @@ void* awaitTask(void* arg)
     uint32_t index = (uint32_t)(uint64_t)arg;
     while (1)
     {
-        while (schedulerData[index].valid == 0)
+        while (schedulerData[index].valid != 1)
         {
             printf("Thread %d inner-looping... 0\n", index);
             if (programDone == 1)

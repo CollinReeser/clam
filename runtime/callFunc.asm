@@ -12,10 +12,6 @@ yield:
     ; return address on the stack, and rbp is whatever it is from the function
     ; that called yield()
 
-    ; Set worker thread to non-executing
-    add     r10, qword [schedulerdata]
-    add     r10, 8
-    mov     byte [r10], 0
     ; Get curThread pointer
     mov     rdx, qword [currentthread]
     ; Get return address
@@ -31,6 +27,8 @@ yield:
     mov     [rdx+24], rsp   ; ThreadData->t_StackCur
     ; Save rbp for thread
     mov     [rdx+40], rbp ; ThreadData->t_rbp
+    ; Set thread isExecuting to 0
+    mov     [rdx+64], 0
 
     jmp     schedulerReturn
 
@@ -40,12 +38,6 @@ yield:
 callFunc:
     push    rbp                     ; set up stack frame
     mov     rbp, rsp
-
-    ; Have r10 point to the address of data[index].valid
-    mov     r10, rsi            ; Do all the work in r10
-    imul    rdx, 16             ; sizeof(SchedulerData)
-    add     r10, rdx            ; r10 now points to data[index]
-    mov     qword [schedulerdata], r10 ; Store in case of a yield
 
     ; Populate registers for operation. ThreadData* thread is initially in rdi
     mov     rcx, rdi            ; ThreadData* thread
