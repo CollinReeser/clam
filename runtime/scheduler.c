@@ -370,6 +370,7 @@ void* awaitTask(void* arg)
             usleep(1);
         }
         ThreadData* threadData = schedulerData[index].threadData;
+        printf("Setting valid to 0: %d\n", index);
         schedulerData[index].valid = 0;
 
         printf("About to call into green thread! %d\n", index);
@@ -381,9 +382,9 @@ void* awaitTask(void* arg)
 
         pthread_mutex_lock(&mutex);
         threadData->isExecuting = 0;
+        printThreadData(threadData, index);
         pthread_mutex_unlock(&mutex);
 
-        printThreadData(threadData, index);
 
     }
 TERM_THREAD:
