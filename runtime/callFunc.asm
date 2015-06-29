@@ -3,7 +3,6 @@
 
 extern mainstack
 extern currentthread
-extern schedulerdata
 
     ; extern void yield();
     global yield
