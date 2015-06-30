@@ -1,8 +1,10 @@
 
-    SECTION .text
+    SECTION .tbss
 
-extern mainstack
-extern currentthread
+mainstack:      resq 1
+currentthread:  resq 1
+
+    SECTION .text
 
     ; extern void yield();
     global yield
@@ -27,7 +29,7 @@ yield:
     ; Save rbp for thread
     mov     [rdx+40], rbp ; ThreadData->t_rbp
     ; Set thread isExecuting to 0
-    mov     [rdx+64], 0
+    mov     byte [rdx+64], 0
 
     jmp     schedulerReturn
 
